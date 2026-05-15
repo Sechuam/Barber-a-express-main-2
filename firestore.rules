@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email == "joselepeperez@gmail.com" ||
+         request.auth.token.email == "vicentequesadagonzalez96@gmail.com");
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.role == 'client';
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role;
+    }
+
+    // Services
+    match /services/{serviceId} {
+      allow read: if true; // Publicly readable
+      allow write: if isAdmin();
+    }
+
+    // Appointments
+    match /appointments/{appointmentId} {
+      // Allow any authenticated user to read so they can see which slots are taken
+      allow read: if isAuthenticated();
+      
+      // Only allow creation if the userId matches the authenticated user
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        isValidId(request.resource.data.serviceId) &&
+        request.resource.data.status == "confirmed";
+        
+      // Only allow updates by the owner or admin
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      
+      // Only admins can delete appointments
+      allow delete: if isAdmin();
+    }
+
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+  }
+}
