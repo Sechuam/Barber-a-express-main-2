@@ -1,53 +1,53 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User } from "firebase/auth";
+import type { ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-interface AuthContextType {
+interface AuthContextValue {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true, isAdmin: false });
+const ADMIN_EMAILS = [
+  "joselepeperez@gmail.com",
+  "joselepeperez+barber@gmail.com",
+  "vicentequesadagonzalez96@gmail.com",
+];
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AuthContext = createContext<AuthContextValue>({
+  user: null,
+  loading: true,
+  isAdmin: false,
+});
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Define admin emails here - using lowercase for comparison
-  const ADMIN_EMAILS = [
-    "joselepeperez@gmail.com",
-    "joselepeperez+barber@gmail.com", // Just in case
-    "vicentequesadagonzalez96@gmail.com"
-  ];
 
   useEffect(() => {
-    if (!auth) {
-      setLoading(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      if (user && user.email) {
-        const userEmail = user.email.toLowerCase().trim();
-        const isUserAdmin = ADMIN_EMAILS.some(e => e.toLowerCase().trim() === userEmail);
-        setIsAdmin(isUserAdmin);
-      } else {
-        setIsAdmin(false);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading, isAdmin }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  const value = useMemo<AuthContextValue>(() => {
+    const email = user?.email?.toLowerCase().trim() ?? "";
+    const isAdmin = ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase().trim() === email);
 
-export const useAuth = () => useContext(AuthContext);
+    return {
+      user,
+      loading,
+      isAdmin,
+    };
+  }, [user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
